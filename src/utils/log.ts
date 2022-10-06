@@ -19,34 +19,27 @@ export interface TableConfig<T> {
     columns: TableColumn<T>[];
 }
 export function table<T>(ns: NS, items: T[], config: TableConfig<T>) {
-    const PADDING = 2;
-
     const columnFormats = config.columns.map((col) =>
         col.format
             ? col.format
-            : `${" ".repeat(PADDING)}%${col.alignLeft ? "-" : ""}${
-                  col.width ?? 1 ?? 1
-              }s ${" ".repeat(PADDING)}`
+            : `${" ".repeat(config.padding)}%${col.alignLeft ? "-" : ""}${col.width ?? 1 ?? 1}s${" ".repeat(
+                  config.padding
+              )}`
     );
 
-    // empty log
-    Array.from({ length: LOG_MAX_SIZE }).forEach(() => ns.print(""));
-
-    const headerRow = config.columns
-        .map((c, i) => ns.sprintf(columnFormats[i], c.header))
-        .join("|");
+    const headerRow = config.columns.map((c, i) => ns.sprintf(columnFormats[i], c.header)).join("|");
     ns.print(headerRow);
     ns.print(headerRow.replaceAll(/./g, "-"));
 
     items.forEach((item) => {
         const itemRow = config.columns
-            .map((c, i) =>
-                ns.sprintf(
-                    columnFormats[i],
-                    "getter" in c ? c.getter(item) : item[c.key]
-                )
-            )
+            .map((c, i) => ns.sprintf(columnFormats[i], "getter" in c ? c.getter(item) : item[c.key] ?? ""))
             .join("|");
         ns.print(itemRow);
     });
+}
+
+export function clear(ns: NS) {
+    // empty log
+    Array.from({ length: LOG_MAX_SIZE }).forEach(() => ns.print(""));
 }

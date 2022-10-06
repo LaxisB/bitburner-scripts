@@ -8,9 +8,7 @@ export async function main(ns: NS) {
 
     while (true) {
         const todo = servers.filter(
-            (server) =>
-                !server.hasAdminRights &&
-                server.requiredHackingSkill <= ns.getHackingLevel()
+            (server) => !server.hasAdminRights && server.requiredHackingSkill <= ns.getHackingLevel()
         );
 
         for (const server of todo) {

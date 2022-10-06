@@ -95,106 +95,80 @@ export async function main(ns: NS) {
         return;
     }
 
-    await iterateTree(
-        ns,
-        start,
-        args.local ? [] : args.blacklist,
-        async (tree: HostTree) => {
-            if (
-                args.force == false &&
-                ns.scriptRunning(script, tree.hostname)
-            ) {
-                args.verbose &&
-                    ns.tprintf("[%20s] already running", tree.hostname);
-                skipped.push({ host: tree.hostname, threads: 0 });
+    await iterateTree(ns, start, args.local ? [] : args.blacklist, async (tree: HostTree) => {
+        if (args.force == false && ns.scriptRunning(script, tree.hostname)) {
+            args.verbose && ns.tprintf("[%20s] already running", tree.hostname);
+            skipped.push({ host: tree.hostname, threads: 0 });
+            return;
+        }
+        // exit if we can't do anything anyway
+        if (tree.server.requiredHackingSkill > ns.getHackingLevel()) {
+            skipped.push({ host: tree.hostname, threads: 0 });
+            return;
+        }
+        // copy needed files
+        await ns.scp([...BASE_FILES, script], tree.hostname, HOME);
+
+        await ns.scriptKill(script, tree.hostname);
+        let t = Math.min(args.threads, ns.getServer(tree.hostname).cpuCores);
+
+        if (args.fill) {
+            const leaveEmpty = 3; // leave 4gb free to run other scripts;
+            const neededRam = await ns.getScriptRam(script, tree.hostname);
+            const { ramUsed, maxRam } = await ns.getServer(tree.hostname);
+            const toFill = Math.floor(Math.max(maxRam - ramUsed - leaveEmpty, 0) / (neededRam || 1));
+            t = toFill || 1;
+        }
+
+        let pid;
+        if (args.local) {
+            pid = await ns.exec(script, HOME, t, tree.hostname, ...(scriptArgs ?? []));
+            while (ns.isRunning(pid)) {
+                await ns.sleep(100);
+            }
+        } else {
+            if (!tree.server.hasAdminRights) {
+                skipped.push({ host: tree.hostname, threads: t });
                 return;
             }
-            // exit if we can't do anything anyway
-            if (tree.server.requiredHackingSkill > ns.getHackingLevel()) {
-                skipped.push({ host: tree.hostname, threads: 0 });
-                return;
-            }
-            // copy needed files
             await ns.scp([...BASE_FILES, script], tree.hostname, HOME);
-
-            await ns.scriptKill(script, tree.hostname);
-            let t = Math.min(
-                args.threads,
-                ns.getServer(tree.hostname).cpuCores
-            );
-
-            if (args.fill) {
-                const leaveEmpty = 3; // leave 4gb free to run other scripts;
-                const neededRam = await ns.getScriptRam(script, tree.hostname);
-                const { ramUsed, maxRam } = await ns.getServer(tree.hostname);
-                const toFill = Math.floor(
-                    Math.max(maxRam - ramUsed - leaveEmpty, 0) /
-                        (neededRam || 1)
-                );
-                t = toFill || 1;
-            }
-
-            let pid;
-            if (args.local) {
-                pid = await ns.exec(
-                    script,
-                    HOME,
-                    t,
-                    tree.hostname,
-                    ...(scriptArgs ?? [])
-                );
-                while (ns.isRunning(pid)) {
-                    await ns.sleep(100);
+            try {
+                pid = await ns.exec(script, tree.hostname, t, ...(scriptArgs ?? []));
+            } catch (e) {
+                ns.tprintf("cannot execute on %s, %s", tree.hostname, e);
+            } finally {
+                for (const file of BASE_FILES) {
+                    await ns.rm(file, tree.hostname);
                 }
-            } else {
-                if (!tree.server.hasAdminRights) {
-                    skipped.push({ host: tree.hostname, threads: t });
-                    return;
-                }
-                await ns.scp([...BASE_FILES, script], tree.hostname, HOME);
-                try {
-                    pid = await ns.exec(
-                        script,
-                        tree.hostname,
-                        t,
-                        ...(scriptArgs ?? [])
-                    );
-                } catch (e) {
-                    ns.tprintf("cannot execute on %s, %s", tree.hostname, e);
-                } finally {
-                    for (const file of BASE_FILES) {
-                        await ns.rm(file, tree.hostname);
-                    }
-                    await ns.rm(script, tree.hostname);
-                }
-            }
-
-            if (pid) {
-                args.verbose &&
-                    ns.tprintf(
-                        "[%20s] spawned pid %s (file=%s threads= %s mem=%s args=%j)",
-                        tree.hostname,
-                        pid,
-                        script,
-                        t,
-                        ns.getScriptRam(script, tree.hostname),
-                        scriptArgs ?? []
-                    );
-                success.push({ host: tree.hostname, threads: t });
-            } else {
-                args.verbose &&
-                    ns.tprintf(
-                        "[%20s] failed (file=%s threads=%s mem=%s args=%j)",
-                        tree.hostname,
-                        script,
-                        t,
-                        ns.getScriptRam(script, "home"),
-                        scriptArgs ?? []
-                    );
-                failed.push({ host: tree.hostname, threads: t });
+                await ns.rm(script, tree.hostname);
             }
         }
-    );
+
+        if (pid) {
+            args.verbose &&
+                ns.tprintf(
+                    "[%20s] spawned pid %s (file=%s threads= %s mem=%s args=%j)",
+                    tree.hostname,
+                    pid,
+                    script,
+                    t,
+                    ns.getScriptRam(script, tree.hostname),
+                    scriptArgs ?? []
+                );
+            success.push({ host: tree.hostname, threads: t });
+        } else {
+            args.verbose &&
+                ns.tprintf(
+                    "[%20s] failed (file=%s threads=%s mem=%s args=%j)",
+                    tree.hostname,
+                    script,
+                    t,
+                    ns.getScriptRam(script, "home"),
+                    scriptArgs ?? []
+                );
+            failed.push({ host: tree.hostname, threads: t });
+        }
+    });
 
     !args.silent &&
         ns.tprintf(
@@ -228,12 +202,7 @@ function writeTree(ns: NS, tree: HostTree) {
     ns.write("tree.txt", JSON.stringify(tree), "w");
 }
 
-async function iterateTree(
-    ns: NS,
-    tree: HostTree,
-    blacklist: string[],
-    fn: (tree: HostTree) => Promise<any>
-) {
+async function iterateTree(ns: NS, tree: HostTree, blacklist: string[], fn: (tree: HostTree) => Promise<any>) {
     if (!blacklist.includes(tree.hostname)) {
         try {
             await fn(tree);
@@ -260,15 +229,8 @@ function findNode(ns: NS, tree: HostTree, hostname: string): HostTree | null {
     return null;
 }
 async function buildTree(ns: NS, host: string) {
-    async function extendTree(
-        ns: NS,
-        host: string,
-        parent: HostTree,
-        depth = 1
-    ) {
-        const hosts = await ns
-            .scan(host)
-            .filter((h) => parent.parents.includes(h) === false);
+    async function extendTree(ns: NS, host: string, parent: HostTree, depth = 1) {
+        const hosts = await ns.scan(host).filter((h) => parent.parents.includes(h) === false);
 
         hosts.forEach((host: string) => {
             parent.children[host] = {
