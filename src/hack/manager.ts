@@ -1,3 +1,4 @@
+import { Server } from "utils/domain";
 import { HOME } from "utils/constants";
 import * as log from "utils/log";
 import * as fmt from "utils/format";
@@ -38,7 +39,7 @@ export async function main(ns: NS) {
         await scheduler.updateServers(count % 10 === 0);
         const runners = scheduler.getAvailableRunners();
         const targets = scheduler.getAvailableTargets();
-        await logStatus(ns, targets, scheduler.getPendingTasks());
+        await logStatus(ns, targets, runners, scheduler.getPendingTasks());
         if (!runners.length) {
             await ns.sleep(1000);
             continue;
@@ -81,7 +82,7 @@ function getNextAction(ns: NS, server: ServerWithEstimates): Task {
     // check how often we'd need to grow to max out money
     const growthsPerDouble = ns.growthAnalyze(server.hostname, 2);
 
-    const shouldGrow = moneyCurr <= moneyMax * 0.9;
+    const shouldGrow = moneyCurr <= moneyMax * 0.5;
 
     const hackTime = ns.getHackTime(server.hostname);
     const hackUsable = server.hasAdminRights && server.requiredHackingSkill <= ns.getHackingLevel();
@@ -99,7 +100,7 @@ function getNextAction(ns: NS, server: ServerWithEstimates): Task {
         };
     }
 
-    if (shouldGrow || !hackUsable) {
+    if (shouldGrow || !hackUsable || !server.canHack) {
         return {
             target: server.hostname,
             action: "grow",
@@ -118,7 +119,7 @@ function getNextAction(ns: NS, server: ServerWithEstimates): Task {
     };
 }
 
-function logStatus(ns: NS, servers: ServerWithEstimates[], tasks: ScheduledTask[]) {
+function logStatus(ns: NS, servers: ServerWithEstimates[], runners: Server[], tasks: ScheduledTask[]) {
     const numFormat = (num: number) =>
         new Intl.NumberFormat("en-US", { maximumSignificantDigits: 3 }).format(num).replaceAll(",000", "k");
 
@@ -161,6 +162,7 @@ function logStatus(ns: NS, servers: ServerWithEstimates[], tasks: ScheduledTask[
 
     const threads = tasks.reduce((acc, curr) => acc + curr.threads, 0);
     const tasksToShow = tasks.sort((a, b) => a.finishesAt - b.finishesAt).slice(0, 5);
+    const runnerRam = runners.reduce((acc, curr) => acc + curr.maxRam - curr.ramUsed, 0);
 
     log.clear(ns);
     log.table(
@@ -180,10 +182,12 @@ function logStatus(ns: NS, servers: ServerWithEstimates[], tasks: ScheduledTask[
         )
     );
     ns.printf(
-        `total: %i processes (%s threads, %s RAM)`,
+        `targets=%i tasks=%i threads=%s  used=%s free=%s`,
+        servers.length,
         tasks.length,
         fmt.formatNum(threads),
-        fmt.formatRam(threads * SCRIPT_COST)
+        fmt.formatRam(threads * SCRIPT_COST),
+        fmt.formatRam(runnerRam)
     );
 }
 
