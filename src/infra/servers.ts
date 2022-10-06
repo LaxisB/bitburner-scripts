@@ -20,14 +20,18 @@ export async function main(ns: NS) {
         } while (ns.getPurchasedServerCost(2 ** pow) < maxCost);
         const targetRam = 2 ** pow;
 
-        if (targetRam <= servers[0].ram) {
+        if (servers.length && targetRam <= servers[0].ram) {
             // not a n increase
-            await ns.sleep(5_000);
+            await ns.sleep(10_000);
             continue;
         }
         if (servers.length >= max) {
             const toDelete = servers[0];
-            ns.printf("reached limit. deleting smallest node (ram=%s)", fmt.formatRam(toDelete.ram));
+            ns.printf(
+                "[%s] reached limit. deleting smallest node (ram=%s)",
+                new Date().toLocaleTimeString(),
+                fmt.formatRam(toDelete.ram)
+            );
             ns.killall(toDelete.host);
             const res = ns.deleteServer(toDelete.host);
             if (!res) {
