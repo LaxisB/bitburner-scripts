@@ -182,9 +182,10 @@ function logStatus(ns: NS, servers: ServerWithEstimates[], runners: Server[], ta
         )
     );
     ns.printf(
-        `targets=%i tasks=%i threads=%s  used=%s free=%s`,
-        servers.length,
-        tasks.length,
+        `targets=%-3s runners=%-3s tasks=%i threads=%s used=%s free=%s`,
+        servers.length.toString().padStart(3, "0"),
+        runners.length.toString().padStart(3, "0"),
+        fmt.formatNum(tasks.length),
         fmt.formatNum(threads),
         fmt.formatRam(threads * SCRIPT_COST),
         fmt.formatRam(runnerRam)
