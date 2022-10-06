@@ -13,6 +13,7 @@ export interface ServerWithEstimates extends Server {
         hacked: number;
         grown: number;
     };
+    canHack: boolean;
     tasksRunning: number;
 }
 
@@ -100,7 +101,7 @@ export async function createScheduler(ns: NS, opts: SchedulerOpts): Promise<Sche
      */
     function getAvailableTargets() {
         return Object.values(servers)
-            .filter((s) => s.moneyAvailable > 0 && s.hasAdminRights)
+            .filter((s) => s.moneyAvailable && s.hasAdminRights)
             .map((s) => {
                 const taskList = _.filter(Array.from(runningTasks), (task) => task.target === s.hostname);
 
@@ -132,7 +133,7 @@ export async function createScheduler(ns: NS, opts: SchedulerOpts): Promise<Sche
                         hacked: moneyHacked,
                         grown: moneyGrown,
                     },
-                    canHack: ns.getServerRequiredHackingLevel(s.hostname) <= ns.getHackingLevel(),
+                    canHack: s.hasAdminRights && ns.getServerRequiredHackingLevel(s.hostname) <= ns.getHackingLevel(),
                     tasksRunning: taskList.length,
                 };
             })
@@ -152,7 +153,7 @@ export async function createScheduler(ns: NS, opts: SchedulerOpts): Promise<Sche
 
     async function updateServers(full = false) {
         const serverlist = full ? await crawlServers(ns, HOME) : Object.values(servers);
-        serverlist.forEach((s) => (servers[s.hostname] = ns.getServer(s.hostname)));
+        serverlist.filter((s) => s.hasAdminRights).forEach((s) => (servers[s.hostname] = ns.getServer(s.hostname)));
 
         return servers;
     }
