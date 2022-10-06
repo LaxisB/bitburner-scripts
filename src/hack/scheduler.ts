@@ -45,7 +45,7 @@ export interface Scheduler {
 }
 
 // keep this amount of ram free
-const HOST_RAM_BLOCKER: Record<string, number> = {
+export const HOST_RAM_BLOCKER: Record<string, number> = {
     home: 64,
 };
 

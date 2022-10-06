@@ -31,7 +31,7 @@ export function formatRam(gigs: number, decimals = 2) {
 
     const i = Math.floor(Math.log(gigs) / Math.log(k));
 
-    return `${parseFloat((gigs / Math.pow(k, i)).toFixed(dm))}${sizes[i]}`;
+    return `${parseFloat((gigs / Math.pow(k, i)).toFixed(dm))}${sizes[i] ?? "MB"}`;
 }
 
 export function formatString(val: string, maxLen = 15) {

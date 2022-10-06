@@ -2,7 +2,7 @@ import { Server } from "utils/domain";
 import { HOME } from "utils/constants";
 import * as log from "utils/log";
 import * as fmt from "utils/format";
-import { Task, ScheduledTask, Scheduler, ServerWithEstimates, createScheduler } from "hack/scheduler";
+import { Task, ScheduledTask, Scheduler, ServerWithEstimates, createScheduler, HOST_RAM_BLOCKER } from "hack/scheduler";
 import type { TableConfig } from "utils/log";
 import type { SlaveArgs } from "hack/slave";
 
@@ -39,7 +39,8 @@ export async function main(ns: NS) {
         await scheduler.updateServers(count % 10 === 0);
         const runners = scheduler.getAvailableRunners();
         const targets = scheduler.getAvailableTargets();
-        await logStatus(ns, targets, runners, scheduler.getPendingTasks());
+        const servers = scheduler.getServers();
+        await logStatus(ns, targets, runners, servers, scheduler.getPendingTasks());
         if (!runners.length) {
             await ns.sleep(1000);
             continue;
@@ -118,7 +119,13 @@ function getNextAction(ns: NS, server: ServerWithEstimates): Task {
     };
 }
 
-function logStatus(ns: NS, servers: ServerWithEstimates[], runners: Server[], tasks: ScheduledTask[]) {
+function logStatus(
+    ns: NS,
+    targets: ServerWithEstimates[],
+    runners: Server[],
+    servers: Server[],
+    tasks: ScheduledTask[]
+) {
     const serverTableConfig: TableConfig<ServerWithEstimates> = {
         padding: 1,
         columns: [
@@ -158,12 +165,24 @@ function logStatus(ns: NS, servers: ServerWithEstimates[], runners: Server[], ta
 
     const threads = tasks.reduce((acc, curr) => acc + curr.threads, 0);
     const tasksToShow = tasks.sort((a, b) => a.finishesAt - b.finishesAt).slice(0, 5);
-    const runnerRam = runners.reduce((acc, curr) => acc + curr.maxRam - curr.ramUsed, 0);
+    const potentialRam = servers.reduce(
+        (acc, curr) => acc + curr.maxRam - curr.ramUsed - (HOST_RAM_BLOCKER[curr.hostname] ?? 0),
+        0
+    );
+
+    const byAction = tasks.reduce((acc, curr) => {
+        if (!acc[curr.action]) {
+            acc[curr.action] = { count: 0, threads: 0 };
+        }
+        acc[curr.action].count += 1;
+        acc[curr.action].threads += curr.threads;
+        return acc;
+    }, {} as Record<string, { count: number; threads: number }>);
 
     log.clear(ns);
     log.table(
         ns,
-        servers.sort((a, b) => a.hostname.localeCompare(b.hostname)),
+        targets.filter((s) => s.tasksRunning).sort((a, b) => a.hostname.localeCompare(b.hostname)),
         serverTableConfig
     );
     ns.print("  ");
@@ -178,13 +197,22 @@ function logStatus(ns: NS, servers: ServerWithEstimates[], runners: Server[], ta
         )
     );
     ns.printf(
-        `targets=%-3s runners=%-3s tasks=%i threads=%s used=%s free=%s`,
-        servers.length.toString().padStart(3, "0"),
+        `targets=%-3s runners=%-3s ramUsed=%s ramFree=%s`,
+        targets.length.toString().padStart(3, "0"),
         runners.length.toString().padStart(3, "0"),
+        fmt.formatRam(threads * SCRIPT_COST),
+        fmt.formatRam(potentialRam)
+    );
+    ns.printf(
+        `total=%s(%s) hack=%i(%s) grow=%i(%s) weaken=%i(%s)`,
         fmt.formatNum(tasks.length),
         fmt.formatNum(threads),
-        fmt.formatRam(threads * SCRIPT_COST),
-        fmt.formatRam(runnerRam)
+        byAction.hack?.count ?? 0,
+        fmt.formatNum(byAction.hack?.threads ?? 0),
+        byAction.grow?.count ?? 0,
+        fmt.formatNum(byAction.grow?.threads ?? 0),
+        byAction.weaken?.count ?? 0,
+        fmt.formatNum(byAction.weaken?.threads ?? 0)
     );
 }
 
