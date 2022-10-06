@@ -85,7 +85,6 @@ function getNextAction(ns: NS, server: ServerWithEstimates): Task {
     const shouldGrow = moneyCurr <= moneyMax * 0.5;
 
     const hackTime = ns.getHackTime(server.hostname);
-    const hackUsable = server.hasAdminRights && server.requiredHackingSkill <= ns.getHackingLevel();
     const hackDelta = moneyCurr * ns.hackAnalyze(server.hostname);
     const maxHackThreads = Math.floor(moneyCurr / hackDelta);
 
@@ -100,7 +99,7 @@ function getNextAction(ns: NS, server: ServerWithEstimates): Task {
         };
     }
 
-    if (shouldGrow || !hackUsable || !server.canHack) {
+    if (shouldGrow || !server.canHack) {
         return {
             target: server.hostname,
             action: "grow",

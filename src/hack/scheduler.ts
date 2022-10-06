@@ -101,7 +101,7 @@ export async function createScheduler(ns: NS, opts: SchedulerOpts): Promise<Sche
      */
     function getAvailableTargets() {
         return Object.values(servers)
-            .filter((s) => s.moneyAvailable && s.hasAdminRights)
+            .filter((s) => s.moneyAvailable)
             .map((s) => {
                 const taskList = _.filter(Array.from(runningTasks), (task) => task.target === s.hostname);
 
@@ -133,7 +133,7 @@ export async function createScheduler(ns: NS, opts: SchedulerOpts): Promise<Sche
                         hacked: moneyHacked,
                         grown: moneyGrown,
                     },
-                    canHack: s.hasAdminRights && ns.getServerRequiredHackingLevel(s.hostname) <= ns.getHackingLevel(),
+                    canHack: ns.getServerRequiredHackingLevel(s.hostname) <= ns.getHackingLevel(),
                     tasksRunning: taskList.length,
                 };
             })
@@ -141,10 +141,7 @@ export async function createScheduler(ns: NS, opts: SchedulerOpts): Promise<Sche
     }
 
     function getAvailableRunners() {
-        const allServers = Object.values(servers);
-        const canExecuteOn = allServers.filter((s) => s.hasAdminRights);
-        const hasSpace = canExecuteOn.filter((s) => getRam(s) > opts.cost);
-        return hasSpace;
+        return Object.values(servers).filter((s) => getRam(s) > opts.cost);
     }
 
     function getPendingTasks() {
