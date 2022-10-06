@@ -119,9 +119,6 @@ function getNextAction(ns: NS, server: ServerWithEstimates): Task {
 }
 
 function logStatus(ns: NS, servers: ServerWithEstimates[], runners: Server[], tasks: ScheduledTask[]) {
-    const numFormat = (num: number) =>
-        new Intl.NumberFormat("en-US", { maximumSignificantDigits: 3 }).format(num).replaceAll(",000", "k");
-
     const serverTableConfig: TableConfig<ServerWithEstimates> = {
         padding: 1,
         columns: [
@@ -129,7 +126,7 @@ function logStatus(ns: NS, servers: ServerWithEstimates[], runners: Server[], ta
                 alignLeft: true,
                 header: "host",
                 width: 20,
-                key: "hostname",
+                getter: (item) => fmt.formatString(item.hostname, 20),
             },
             {
                 header: "$",
@@ -149,12 +146,12 @@ function logStatus(ns: NS, servers: ServerWithEstimates[], runners: Server[], ta
             {
                 header: "secu Δ",
                 width: 6,
-                getter: (item) => numFormat(ns.getServerSecurityLevel(item.hostname) - item.security.min),
+                getter: (item) => fmt.formatNum(ns.getServerSecurityLevel(item.hostname) - item.security.min),
             },
             {
                 header: "secu -",
                 width: 6,
-                getter: (item) => numFormat(item.security.current - ns.getServerSecurityLevel(item.hostname)),
+                getter: (item) => fmt.formatNum(item.security.current - ns.getServerSecurityLevel(item.hostname)),
             },
         ],
     };

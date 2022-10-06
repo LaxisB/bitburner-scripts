@@ -1,4 +1,4 @@
-const numFormatter = new Intl.NumberFormat("en-US", { maximumSignificantDigits: 3 });
+const numFormatter = new Intl.NumberFormat("en-US", { maximumSignificantDigits: 3, maximumFractionDigits: 5 });
 
 export function formatDuration(millis: number) {
     const time = Math.floor(millis / 1000);
@@ -7,7 +7,7 @@ export function formatDuration(millis: number) {
     return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 export function formatNum(num: number) {
-    return numFormatter.format(num);
+    return num < 0.00005 ? "0" : numFormatter.format(num);
 }
 
 export function formatMoney(money: number, decimals = 2) {
