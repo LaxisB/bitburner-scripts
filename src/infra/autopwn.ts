@@ -7,9 +7,7 @@ export async function main(ns: NS) {
     const servers = await crawlServers(ns, HOME, 10);
 
     while (true) {
-        const todo = servers.filter(
-            (server) => !server.hasAdminRights && server.requiredHackingSkill <= ns.getHackingLevel()
-        );
+        const todo = servers.filter((server) => !server.hasAdminRights);
 
         for (const server of todo) {
             const host = server.hostname;
@@ -30,7 +28,6 @@ export async function main(ns: NS) {
             } catch (e) {}
             try {
                 ns.nuke(host);
-                ns.print(`pwned ${host}`);
             } catch (e) {}
         }
 
